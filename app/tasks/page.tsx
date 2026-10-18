@@ -4,7 +4,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { LoginForm } from '@/components/login-form';
 import { CreateTaskModal } from '@/components/create-task-modal';
-import { fetchTasks, createTask, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
+import { EditTaskModal } from '@/components/edit-task-modal';
+import { fetchTasks, createTask, updateTask, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
 
 type FilterType = 'all' | TaskStatus;
 
@@ -64,6 +65,10 @@ function TasksList() {
   // Create Task Modal state
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const createButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Edit Task Modal state
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const editButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   useEffect(() => {
     let ignore = false;
@@ -132,6 +137,30 @@ function TasksList() {
   const handleCreateTask = async (title: string) => {
     try {
       await createTask({ title }, { token: token ?? undefined });
+      setReloadTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.isUnauthorized) {
+        handleSessionExpired('Su sesión ha expirado o no es válida. Inicie sesión nuevamente.');
+      }
+      throw err;
+    }
+  };
+
+  const handleOpenEditModal = (task: Task) => {
+    setEditingTask(task);
+  };
+
+  const handleCloseEditModal = () => {
+    const taskId = editingTask?.id;
+    setEditingTask(null);
+    if (taskId) {
+      editButtonRefs.current.get(taskId)?.focus();
+    }
+  };
+
+  const handleUpdateTask = async (id: string, updates: { title: string; status: TaskStatus }) => {
+    try {
+      await updateTask(id, updates, { token: token ?? undefined });
       setReloadTrigger((prev) => prev + 1);
     } catch (err: unknown) {
       if (err instanceof ApiError && err.isUnauthorized) {
@@ -278,6 +307,9 @@ function TasksList() {
                   <th scope="col" className="py-3.5 px-4 font-semibold text-zinc-900 dark:text-zinc-100">
                     Fecha de creación
                   </th>
+                  <th scope="col" className="py-3.5 px-4 font-semibold text-zinc-900 dark:text-zinc-100 text-right">
+                    Acciones
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -301,6 +333,23 @@ function TasksList() {
                     </td>
                     <td className="py-3.5 px-4 whitespace-nowrap text-zinc-600 dark:text-zinc-400 text-xs">
                       {formatDate(task.createdAt)}
+                    </td>
+                    <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                      <button
+                        type="button"
+                        ref={(el) => {
+                          if (el) {
+                            editButtonRefs.current.set(task.id, el);
+                          } else {
+                            editButtonRefs.current.delete(task.id);
+                          }
+                        }}
+                        onClick={() => handleOpenEditModal(task)}
+                        aria-label={`Editar tarea ${task.title}`}
+                        className="px-3 py-1 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        Editar
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -345,6 +394,15 @@ function TasksList() {
         <CreateTaskModal
           onClose={handleCloseCreateModal}
           onSubmit={handleCreateTask}
+        />
+      )}
+
+      {/* Modal de edición de tarea */}
+      {editingTask && (
+        <EditTaskModal
+          task={editingTask}
+          onClose={handleCloseEditModal}
+          onSubmit={handleUpdateTask}
         />
       )}
     </div>

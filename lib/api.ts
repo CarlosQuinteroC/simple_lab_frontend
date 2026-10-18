@@ -167,3 +167,85 @@ export async function createTask(
     );
   }
 }
+
+export async function updateTask(
+  id: string,
+  data: { title: string; status: TaskStatus },
+  options?: { token?: string }
+): Promise<Task> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const url = new URL(`/api/tasks/${encodeURIComponent(id)}`, baseUrl);
+
+  let authToken = options?.token;
+  if (!authToken) {
+    const supabase = getSupabase();
+    const session = (await supabase.auth.getSession()).data.session;
+    authToken = session?.access_token;
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({
+        title: data.title.trim(),
+        status: data.status,
+      }),
+    });
+
+    if (!res.ok) {
+      let errorMessage = 'Error al actualizar la tarea.';
+      if (res.status === 404) {
+        errorMessage = 'La tarea solicitada no existe o no está disponible.';
+      } else if (res.status >= 500) {
+        errorMessage = 'Error en el servidor al actualizar la tarea.';
+      } else {
+        try {
+          const errorBody = await res.json();
+          errorMessage = errorBody.message || errorBody.error || errorMessage;
+        } catch {
+          // use default
+        }
+      }
+      throw new ApiError(errorMessage, res.status);
+    }
+
+    if (res.status === 204) {
+      return {
+        id,
+        title: data.title.trim(),
+        status: data.status,
+        createdAt: new Date().toISOString(),
+      };
+    }
+
+    try {
+      const updatedTask = (await res.json()) as Task;
+      return updatedTask;
+    } catch {
+      return {
+        id,
+        title: data.title.trim(),
+        status: data.status,
+        createdAt: new Date().toISOString(),
+      };
+    }
+  } catch (err) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    throw new ApiError(
+      'Error de red o comunicación al conectar con el servicio de tareas.',
+      0
+    );
+  }
+}
