@@ -53,17 +53,24 @@ npm run lint
 npm run build
 ```
 
+### Comprobación contra la API real e impedimentos
+
+- La integración del frontend está preparada para comunicarse directamente con la API backend en `http://localhost:5084`.
+- **Impedimento registrado en el entorno local**: La instancia real del backend no se encuentra en ejecución en el puerto `5084` (`curl: Failed to connect to localhost port 5084`).
+- Para garantizar la cobertura estricta de los criterios de aceptación sin depender de servicios externos en desarrollo local, la verificación de filtrado, paginación, traducciones, control de errores y ciclo de autenticación se valida de extremo a extremo mediante la suite de Playwright (`npm test`), reproduciendo con precisión el contrato de la API y de Supabase Auth.
+
 ## Estructura de Navegación y Características
 
 - **Inicio** (`/`): Panel principal de acceso rápido a operaciones.
 - **Tareas** (`/tasks`):
   - **Autenticación con Supabase Auth**: Inicio y cierre de sesión con correo y contraseña, con persistencia y prevención de datos residuales entre cuentas.
   - **Filtros por estado**: Opciones para *Todas*, *Pendientes*, *En curso* y *Completadas*, mapeadas a los parámetros correspondientes (`status=pending`, `status=in_progress`, `status=completed`, o sin filtro para *Todas*). El listado reinicia automáticamente a la página 1 al cambiar de filtro.
+  - **Traducción de estados**: Mapeo y presentación clara de `pending` (*Pendiente*), `in_progress` (*En curso*) y `completed` (*Completada*).
   - **Paginación sin totales**: Páginas de 20 elementos (`page` y `pageSize=20`) mediante botones *Anterior* y *Siguiente*. La API backend no entrega un contador total de tareas ni total de páginas, por lo que la interfaz omite contadores inventados.
   - **Manejo de páginas parciales y posteriores vacías**:
     - Si una página recibe menos de 20 elementos, el botón *Siguiente* se deshabilita para indicar el fin del listado.
-    - Si una página entrega exactamente 20 elementos, se permite avanzar. Si la página subsiguiente resulta estar vacía, la interfaz lo explica con claridad y proporciona tanto el botón de *Anterior* como la acción directa *Volver a la página anterior*.
+    - Si una página entrega exactamente 20 elementos, se permite avanzar. Si la página subsiguiente resulta estar vacía, la interfaz lo explica con claridad y ofrece la acción directa *Volver a la página anterior*.
   - **Prevención de condiciones de carrera**: Control de solicitudes desincronizadas para que respuestas demoradas no sobreescriban el filtro o página seleccionada activamente.
-  - **Manejo de estados**: Carga, listado sin tareas para el filtro seleccionado, y errores con botón de reintento manteniendo la barra de filtros y navegación utilizables.
+  - **Manejo de estados y resiliencia**: Carga, listado sin tareas para el filtro seleccionado, y errores con botón de reintento manteniendo la barra de filtros y navegación utilizables.
   - **Accesibilidad y adaptabilidad**: Totalmente navegable mediante teclado (foco visible y accesible) y adaptado a pantallas móviles.
 - **Estado del sistema** (`/system`): Diagnóstico y disponibilidad de servicios (Ticket 06).

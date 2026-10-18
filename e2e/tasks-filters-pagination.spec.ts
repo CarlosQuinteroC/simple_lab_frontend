@@ -39,7 +39,7 @@ test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
     });
   });
 
-  test('Slice 1: Ofrece filtros Todas, Pendientes, En curso y Completadas, enviando status correcto', async ({ page }) => {
+  test('Slice 1: Ofrece filtros Todas, Pendientes, En curso y Completadas, enviando status correcto y traduciendo estados', async ({ page }) => {
     const requestedUrls: string[] = [];
 
     await page.route('**/api/tasks*', async (route) => {
@@ -89,6 +89,11 @@ test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
     await expect(page.getByText('Tarea General 1')).toBeVisible();
     const initialUrl = new URL(requestedUrls[0]);
     expect(initialUrl.searchParams.get('status')).toBeNull();
+
+    // Verificar traducciones de estado en las celdas
+    await expect(page.getByRole('cell', { name: /^Pendiente$/i })).toBeVisible();
+    await expect(page.getByRole('cell', { name: /^En curso$/i })).toBeVisible();
+    await expect(page.getByRole('cell', { name: /^Completada$/i })).toBeVisible();
 
     // Filtrar por "Pendientes"
     await filterPending.click();
@@ -282,12 +287,13 @@ test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
     await expect(prevBtn).toBeDisabled();
   });
 
-  test('Slice 6: Distingue filtro sin resultados y mantiene navegables los filtros ante error de consulta', async ({ page }) => {
+  test('Slice 6: Distingue filtro sin resultados y mantiene navegables los filtros y paginación ante error de consulta', async ({ page }) => {
     let shouldFail = false;
 
     await page.route('**/api/tasks*', async (route) => {
       const url = new URL(route.request().url());
       const status = url.searchParams.get('status');
+      const pageParam = url.searchParams.get('page');
 
       if (shouldFail) {
         await route.fulfill({
@@ -306,12 +312,13 @@ test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
           body: JSON.stringify({ items: [], page: 1, pageSize: 20 }),
         });
       } else {
+        const p = parseInt(pageParam || '1', 10);
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify({
-            items: [{ id: 't1', title: 'Tarea Activa', status: 'pending', createdAt: new Date().toISOString() }],
-            page: 1,
+            items: [{ id: `t${p}`, title: `Tarea Activa P${p}`, status: 'pending', createdAt: new Date().toISOString() }],
+            page: p,
             pageSize: 20,
           }),
         });
@@ -321,7 +328,7 @@ test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
     await page.goto('/tasks');
     await loginAsOperator(page);
 
-    await expect(page.getByText('Tarea Activa')).toBeVisible();
+    await expect(page.getByText('Tarea Activa P1')).toBeVisible();
 
     // Cambiar a "Completadas" (filtro sin resultados)
     const filterCompleted = page.getByRole('button', { name: /^Completadas$/i });
@@ -346,7 +353,7 @@ test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
     await filterAll.click();
 
     // Recupera la vista normalmente
-    await expect(page.getByText('Tarea Activa')).toBeVisible();
+    await expect(page.getByText('Tarea Activa P1')).toBeVisible();
     await expect(alert).not.toBeVisible();
   });
 

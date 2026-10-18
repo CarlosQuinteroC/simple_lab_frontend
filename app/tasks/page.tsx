@@ -82,6 +82,7 @@ function TasksList() {
             handleSessionExpired('Su sesión ha expirado o no es válida. Inicie sesión nuevamente.');
             return;
           }
+          setTasks([]);
           setTasksError(err instanceof ApiError ? err.message : 'Ocurrió un error inesperado al cargar las tareas.');
           setIsLoadingTasks(false);
         });
@@ -96,6 +97,7 @@ function TasksList() {
     if (newFilter === statusFilter) return;
     setIsLoadingTasks(true);
     setTasksError(null);
+    setTasks([]);
     setStatusFilter(newFilter);
     setCurrentPage(1);
   };
@@ -103,6 +105,7 @@ function TasksList() {
   const handlePageChange = (newPage: number) => {
     setIsLoadingTasks(true);
     setTasksError(null);
+    setTasks([]);
     setCurrentPage(newPage);
   };
 
@@ -125,7 +128,8 @@ function TasksList() {
     }
   };
 
-  const showPagination = !tasksError && !isLoadingTasks && (tasks.length > 0 || currentPage > 1);
+  // Show bottom pagination when there are tasks or when currentPage > 1 so navigation remains accessible
+  const showPagination = !isLoadingTasks && (tasks.length > 0 || (tasksError !== null && currentPage > 1));
 
   return (
     <div className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full">
