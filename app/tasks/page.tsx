@@ -1,45 +1,75 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { LoginForm } from '@/components/login-form';
-import { fetchTasks, Task, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
+import { fetchTasks, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
+
+type FilterType = 'all' | TaskStatus;
+
+const FILTER_OPTIONS: { label: string; value: FilterType }[] = [
+  { label: 'Todas', value: 'all' },
+  { label: 'Pendientes', value: 'pending' },
+  { label: 'En curso', value: 'in_progress' },
+  { label: 'Completadas', value: 'completed' },
+];
+
+interface EmptyStateProps {
+  title: string;
+  description: string;
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
+}
+
+function EmptyState({ title, description, action }: EmptyStateProps) {
+  return (
+    <div className="flex flex-col items-center justify-center p-16 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center">
+      <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4 text-zinc-400">
+        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.5"
+            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+          />
+        </svg>
+      </div>
+      <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{title}</h3>
+      <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm mb-4">{description}</p>
+      {action && (
+        <button
+          type="button"
+          onClick={action.onClick}
+          className="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {action.label}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function TasksList() {
   const { token, handleSessionExpired } = useAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [statusFilter, setStatusFilter] = useState<FilterType>('all');
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoadingTasks, setIsLoadingTasks] = useState(true);
   const [tasksError, setTasksError] = useState<string | null>(null);
-
-  const loadTasks = useCallback(async () => {
-    if (!token) return;
-
-    setIsLoadingTasks(true);
-    setTasksError(null);
-
-    try {
-      const response = await fetchTasks({ page: 1, pageSize: 20, token });
-      setTasks(response.items);
-    } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        if (err.isUnauthorized) {
-          handleSessionExpired('Su sesión ha expirado o no es válida. Inicie sesión nuevamente.');
-          return;
-        }
-        setTasksError(err.message);
-      } else {
-        setTasksError('Ocurrió un error inesperado al cargar las tareas.');
-      }
-    } finally {
-      setIsLoadingTasks(false);
-    }
-  }, [token, handleSessionExpired]);
+  const [reloadTrigger, setReloadTrigger] = useState(0);
 
   useEffect(() => {
     let ignore = false;
 
     if (token) {
-      fetchTasks({ page: 1, pageSize: 20, token })
+      fetchTasks({
+        page: currentPage,
+        pageSize: 20,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        token,
+      })
         .then((response) => {
           if (!ignore) {
             setTasks(response.items);
@@ -60,7 +90,27 @@ function TasksList() {
     return () => {
       ignore = true;
     };
-  }, [token, handleSessionExpired]);
+  }, [token, currentPage, statusFilter, reloadTrigger, handleSessionExpired]);
+
+  const handleFilterChange = (newFilter: FilterType) => {
+    if (newFilter === statusFilter) return;
+    setIsLoadingTasks(true);
+    setTasksError(null);
+    setStatusFilter(newFilter);
+    setCurrentPage(1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setIsLoadingTasks(true);
+    setTasksError(null);
+    setCurrentPage(newPage);
+  };
+
+  const handleRetry = () => {
+    setIsLoadingTasks(true);
+    setTasksError(null);
+    setReloadTrigger((prev) => prev + 1);
+  };
 
   const formatDate = (dateString: string) => {
     try {
@@ -75,6 +125,8 @@ function TasksList() {
     }
   };
 
+  const showPagination = !tasksError && !isLoadingTasks && (tasks.length > 0 || currentPage > 1);
+
   return (
     <div className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full">
       <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -83,10 +135,32 @@ function TasksList() {
             Tareas de laboratorio
           </h2>
           <p className="text-sm text-zinc-600 dark:text-zinc-400 mt-1">
-            Consulta las primeras 20 tareas registradas en el sistema.
+            Consulta y filtra las tareas registradas en el sistema.
           </p>
         </div>
       </header>
+
+      {/* Filter Tabs */}
+      <div className="mb-6 flex flex-wrap gap-2 items-center" role="region" aria-label="Filtros por estado">
+        {FILTER_OPTIONS.map((option) => {
+          const isSelected = statusFilter === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => handleFilterChange(option.value)}
+              aria-pressed={isSelected}
+              className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                isSelected
+                  ? 'bg-blue-600 text-white shadow-sm font-semibold'
+                  : 'bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 border border-zinc-200 dark:border-zinc-700'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Error state */}
       {tasksError && (
@@ -106,7 +180,7 @@ function TasksList() {
           </div>
           <button
             type="button"
-            onClick={loadTasks}
+            onClick={handleRetry}
             className="px-3 py-1.5 bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 hover:bg-red-200 dark:hover:bg-red-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
           >
             Reintentar
@@ -128,23 +202,26 @@ function TasksList() {
           <p className="text-sm text-zinc-600 dark:text-zinc-400 font-medium">Cargando tareas...</p>
         </div>
       ) : !tasksError && tasks.length === 0 ? (
-        /* Empty state */
-        <div className="flex flex-col items-center justify-center p-16 bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 text-center">
-          <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center mb-4 text-zinc-400">
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="1.5"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-              />
-            </svg>
-          </div>
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">No hay tareas registradas</h3>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm">
-            Actualmente no existen tareas en esta consulta.
-          </p>
-        </div>
+        /* Empty states */
+        currentPage > 1 ? (
+          <EmptyState
+            title="Página vacía"
+            description={`No hay más tareas registradas en la página ${currentPage}.`}
+            action={{
+              label: 'Volver a la página anterior',
+              onClick: () => handlePageChange(Math.max(1, currentPage - 1)),
+            }}
+          />
+        ) : (
+          <EmptyState
+            title={statusFilter === 'all' ? 'No hay tareas registradas' : 'No hay tareas con este estado'}
+            description={
+              statusFilter === 'all'
+                ? 'Actualmente no existen tareas en esta consulta.'
+                : 'No se encontraron tareas con el filtro seleccionado.'
+            }
+          />
+        )
       ) : tasks.length > 0 ? (
         /* Tasks List Table */
         <div className="bg-white dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800 shadow-sm overflow-hidden">
@@ -192,6 +269,36 @@ function TasksList() {
           </div>
         </div>
       ) : null}
+
+      {/* Pagination Controls */}
+      {showPagination && (
+        <nav
+          aria-label="Paginación de tareas"
+          className="mt-4 flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 shadow-sm"
+        >
+          <span className="text-xs text-zinc-600 dark:text-zinc-400 font-medium">
+            Página {currentPage}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1 || isLoadingTasks}
+              className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Anterior
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={tasks.length < 20 || isLoadingTasks}
+              className="px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              Siguiente
+            </button>
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
