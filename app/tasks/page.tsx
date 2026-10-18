@@ -5,7 +5,8 @@ import { useAuth } from '@/context/auth-context';
 import { LoginForm } from '@/components/login-form';
 import { CreateTaskModal } from '@/components/create-task-modal';
 import { EditTaskModal } from '@/components/edit-task-modal';
-import { fetchTasks, createTask, updateTask, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
+import { DeleteTaskModal } from '@/components/delete-task-modal';
+import { fetchTasks, createTask, updateTask, deleteTask, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
 
 type FilterType = 'all' | TaskStatus;
 
@@ -69,6 +70,10 @@ function TasksList() {
   // Edit Task Modal state
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const editButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+
+  // Delete Task Modal state
+  const [deletingTask, setDeletingTask] = useState<Task | null>(null);
+  const deleteButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
 
   useEffect(() => {
     let ignore = false;
@@ -162,6 +167,40 @@ function TasksList() {
     try {
       await updateTask(id, updates, { token: token ?? undefined });
       setReloadTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.isUnauthorized) {
+        handleSessionExpired('Su sesión ha expirado o no es válida. Inicie sesión nuevamente.');
+      }
+      throw err;
+    }
+  };
+
+  const handleOpenDeleteModal = (task: Task) => {
+    setDeletingTask(task);
+  };
+
+  const handleCloseDeleteModal = () => {
+    const taskId = deletingTask?.id;
+    setDeletingTask(null);
+    if (taskId) {
+      const btn = deleteButtonRefs.current.get(taskId);
+      if (btn && document.body.contains(btn)) {
+        btn.focus();
+      } else {
+        createButtonRef.current?.focus();
+      }
+    }
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    try {
+      await deleteTask(id, { token: token ?? undefined });
+      if (tasks.length === 1 && currentPage > 1) {
+        // If deleting the last item on page > 1, navigate back to previous page
+        setCurrentPage((prev) => Math.max(1, prev - 1));
+      } else {
+        setReloadTrigger((prev) => prev + 1);
+      }
     } catch (err: unknown) {
       if (err instanceof ApiError && err.isUnauthorized) {
         handleSessionExpired('Su sesión ha expirado o no es válida. Inicie sesión nuevamente.');
@@ -335,21 +374,38 @@ function TasksList() {
                       {formatDate(task.createdAt)}
                     </td>
                     <td className="py-3.5 px-4 whitespace-nowrap text-right">
-                      <button
-                        type="button"
-                        ref={(el) => {
-                          if (el) {
-                            editButtonRefs.current.set(task.id, el);
-                          } else {
-                            editButtonRefs.current.delete(task.id);
-                          }
-                        }}
-                        onClick={() => handleOpenEditModal(task)}
-                        aria-label={`Editar tarea ${task.title}`}
-                        className="px-3 py-1 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        Editar
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          ref={(el) => {
+                            if (el) {
+                              editButtonRefs.current.set(task.id, el);
+                            } else {
+                              editButtonRefs.current.delete(task.id);
+                            }
+                          }}
+                          onClick={() => handleOpenEditModal(task)}
+                          aria-label={`Editar tarea ${task.title}`}
+                          className="px-3 py-1 text-xs font-semibold rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          ref={(el) => {
+                            if (el) {
+                              deleteButtonRefs.current.set(task.id, el);
+                            } else {
+                              deleteButtonRefs.current.delete(task.id);
+                            }
+                          }}
+                          onClick={() => handleOpenDeleteModal(task)}
+                          aria-label={`Eliminar tarea ${task.title}`}
+                          className="px-3 py-1 text-xs font-semibold rounded-lg border border-red-200 dark:border-red-900/60 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500"
+                        >
+                          Eliminar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -403,6 +459,15 @@ function TasksList() {
           task={editingTask}
           onClose={handleCloseEditModal}
           onSubmit={handleUpdateTask}
+        />
+      )}
+
+      {/* Modal de confirmación de eliminación */}
+      {deletingTask && (
+        <DeleteTaskModal
+          task={deletingTask}
+          onClose={handleCloseDeleteModal}
+          onConfirm={handleDeleteTask}
         />
       )}
     </div>

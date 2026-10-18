@@ -249,3 +249,61 @@ export async function updateTask(
     );
   }
 }
+
+export async function deleteTask(
+  id: string,
+  options?: { token?: string }
+): Promise<void> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const url = new URL(`/api/tasks/${encodeURIComponent(id)}`, baseUrl);
+
+  let authToken = options?.token;
+  if (!authToken) {
+    const supabase = getSupabase();
+    const session = (await supabase.auth.getSession()).data.session;
+    authToken = session?.access_token;
+  }
+
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+  };
+
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'DELETE',
+      headers,
+    });
+
+    if (!res.ok) {
+      let errorMessage = 'Error al eliminar la tarea.';
+      if (res.status === 404) {
+        errorMessage = 'La tarea solicitada no existe o ya fue eliminada.';
+      } else if (res.status >= 500) {
+        errorMessage = 'Error en el servidor al eliminar la tarea.';
+      } else {
+        try {
+          const errorBody = await res.json();
+          errorMessage = errorBody.message || errorBody.error || errorMessage;
+        } catch {
+          // use default
+        }
+      }
+      throw new ApiError(errorMessage, res.status);
+    }
+
+    // 204 No Content is success
+    return;
+  } catch (err) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    throw new ApiError(
+      'Error de red o comunicación al conectar con el servicio de tareas.',
+      0
+    );
+  }
+}
