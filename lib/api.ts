@@ -109,3 +109,61 @@ export async function fetchTasks(options: {
     );
   }
 }
+
+export async function createTask(
+  data: { title: string },
+  options?: { token?: string }
+): Promise<Task> {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const url = new URL('/api/tasks', baseUrl);
+
+  let authToken = options?.token;
+  if (!authToken) {
+    const supabase = getSupabase();
+    const session = (await supabase.auth.getSession()).data.session;
+    authToken = session?.access_token;
+  }
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+  };
+
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ title: data.title.trim() }),
+    });
+
+    if (!res.ok) {
+      let errorMessage = 'Error al crear la tarea.';
+      if (res.status >= 500) {
+        errorMessage = 'Error en el servidor al crear la tarea.';
+      } else {
+        try {
+          const errorBody = await res.json();
+          errorMessage = errorBody.message || errorBody.error || errorMessage;
+        } catch {
+          // use default
+        }
+      }
+      throw new ApiError(errorMessage, res.status);
+    }
+
+    const createdTask = (await res.json()) as Task;
+    return createdTask;
+  } catch (err) {
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    throw new ApiError(
+      'Error de red o comunicación al conectar con el servicio de tareas.',
+      0
+    );
+  }
+}

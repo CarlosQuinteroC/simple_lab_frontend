@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/context/auth-context';
 import { LoginForm } from '@/components/login-form';
-import { fetchTasks, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
+import { CreateTaskModal } from '@/components/create-task-modal';
+import { fetchTasks, createTask, Task, TaskStatus, ApiError, STATUS_LABELS, STATUS_COLORS } from '@/lib/api';
 
 type FilterType = 'all' | TaskStatus;
 
@@ -60,6 +61,10 @@ function TasksList() {
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
+  // Create Task Modal state
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const createButtonRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     let ignore = false;
 
@@ -115,6 +120,27 @@ function TasksList() {
     setReloadTrigger((prev) => prev + 1);
   };
 
+  const handleOpenCreateModal = () => {
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCloseCreateModal = () => {
+    setIsCreateModalOpen(false);
+    createButtonRef.current?.focus();
+  };
+
+  const handleCreateTask = async (title: string) => {
+    try {
+      await createTask({ title }, { token: token ?? undefined });
+      setReloadTrigger((prev) => prev + 1);
+    } catch (err: unknown) {
+      if (err instanceof ApiError && err.isUnauthorized) {
+        handleSessionExpired('Su sesión ha expirado o no es válida. Inicie sesión nuevamente.');
+      }
+      throw err;
+    }
+  };
+
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
@@ -128,12 +154,11 @@ function TasksList() {
     }
   };
 
-  // Show bottom pagination when there are tasks or when currentPage > 1 so navigation remains accessible
   const showPagination = !isLoadingTasks && (tasks.length > 0 || (tasksError !== null && currentPage > 1));
 
   return (
     <div className="flex-1 p-6 md:p-10 max-w-6xl mx-auto w-full">
-      <header className="mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <header className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100 tracking-tight">
             Tareas de laboratorio
@@ -142,6 +167,17 @@ function TasksList() {
             Consulta y filtra las tareas registradas en el sistema.
           </p>
         </div>
+        <button
+          type="button"
+          ref={createButtonRef}
+          onClick={handleOpenCreateModal}
+          className="self-start sm:self-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-colors cursor-pointer flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Nueva tarea</span>
+        </button>
       </header>
 
       {/* Filter Tabs */}
@@ -302,6 +338,14 @@ function TasksList() {
             </button>
           </div>
         </nav>
+      )}
+
+      {/* Modal de creación de tarea */}
+      {isCreateModalOpen && (
+        <CreateTaskModal
+          onClose={handleCloseCreateModal}
+          onSubmit={handleCreateTask}
+        />
       )}
     </div>
   );
