@@ -39,13 +39,17 @@ export class ApiError extends Error {
   }
 }
 
+export function getApiBaseUrl(): string {
+  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+}
+
 export async function fetchTasks(options: {
   page?: number;
   pageSize?: number;
   status?: TaskStatus;
   token?: string;
 }): Promise<PagedTasksResponse> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const baseUrl = getApiBaseUrl();
   const page = options.page ?? 1;
   const pageSize = options.pageSize ?? 20;
 
@@ -114,7 +118,7 @@ export async function createTask(
   data: { title: string },
   options?: { token?: string }
 ): Promise<Task> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const baseUrl = getApiBaseUrl();
   const url = new URL('/api/tasks', baseUrl);
 
   let authToken = options?.token;
@@ -173,7 +177,7 @@ export async function updateTask(
   data: { title: string; status: TaskStatus },
   options?: { token?: string }
 ): Promise<Task> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const baseUrl = getApiBaseUrl();
   const url = new URL(`/api/tasks/${encodeURIComponent(id)}`, baseUrl);
 
   let authToken = options?.token;
@@ -254,7 +258,7 @@ export async function deleteTask(
   id: string,
   options?: { token?: string }
 ): Promise<void> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
+  const baseUrl = getApiBaseUrl();
   const url = new URL(`/api/tasks/${encodeURIComponent(id)}`, baseUrl);
 
   let authToken = options?.token;
@@ -305,5 +309,147 @@ export async function deleteTask(
       'Error de red o comunicación al conectar con el servicio de tareas.',
       0
     );
+  }
+}
+
+/* ========================================================================= */
+/* System Diagnostics API (Ticket 06)                                       */
+/* ========================================================================= */
+
+export interface HealthCheckResult {
+  ok: boolean;
+  status: string;
+  statusCode?: number;
+  message: string;
+}
+
+export interface VersionResult {
+  ok: boolean;
+  version?: string;
+  error?: string;
+}
+
+export async function fetchLiveness(): Promise<HealthCheckResult> {
+  const url = new URL('/health/live', getApiBaseUrl());
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/json, text/plain' },
+    });
+
+    if (res.ok) {
+      let text = '';
+      try {
+        text = await res.text();
+      } catch {
+        // ignore
+      }
+      return {
+        ok: true,
+        status: 'Healthy',
+        statusCode: res.status,
+        message: text.trim() || 'Proceso en ejecución y respondiendo.',
+      };
+    }
+
+    return {
+      ok: false,
+      status: 'Unhealthy',
+      statusCode: res.status,
+      message: `El servicio respondió con estado ${res.status}.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 'Error',
+      message: 'No se pudo conectar con el servicio (error de red o API no disponible).',
+    };
+  }
+}
+
+export async function fetchReadiness(): Promise<HealthCheckResult> {
+  const url = new URL('/health/ready', getApiBaseUrl());
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/json, text/plain' },
+    });
+
+    if (res.ok) {
+      let text = '';
+      try {
+        text = await res.text();
+      } catch {
+        // ignore
+      }
+      return {
+        ok: true,
+        status: 'Healthy',
+        statusCode: res.status,
+        message: text.trim() || 'Acceso a la dependencia de datos operativo.',
+      };
+    }
+
+    return {
+      ok: false,
+      status: 'Unhealthy',
+      statusCode: res.status,
+      message:
+        res.status === 503
+          ? 'Dependencia de datos no disponible o degradada.'
+          : `El servicio respondió con estado ${res.status}.`,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: 'Error',
+      message: 'No se pudo verificar la dependencia de datos (error de red).',
+    };
+  }
+}
+
+export async function fetchVersion(): Promise<VersionResult> {
+  const url = new URL('/version', getApiBaseUrl());
+  try {
+    const res = await fetch(url.toString(), {
+      method: 'GET',
+      headers: { Accept: 'application/json, text/plain' },
+    });
+
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      let version = '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        version =
+          typeof data === 'string'
+            ? data
+            : data.version || data.serviceVersion || data.appVersion || '';
+      } else {
+        version = (await res.text()).trim();
+      }
+
+      if (!version) {
+        return {
+          ok: false,
+          error: 'La respuesta no proporcionó una versión válida.',
+        };
+      }
+
+      return {
+        ok: true,
+        version,
+      };
+    }
+
+    return {
+      ok: false,
+      error: `Error al consultar versión (código ${res.status}).`,
+    };
+  } catch {
+    return {
+      ok: false,
+      error: 'No se pudo consultar la versión (error de red o API no disponible).',
+    };
   }
 }
