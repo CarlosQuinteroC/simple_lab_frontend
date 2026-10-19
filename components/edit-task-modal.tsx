@@ -1,7 +1,9 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Task, TaskStatus, STATUS_LABELS, ApiError } from '@/lib/api';
+import { validateTaskTitle } from '@/lib/task-validation';
+import { useModalFocusTrap } from '@/components/use-modal-focus-trap';
 
 interface EditTaskModalProps {
   task: Task;
@@ -16,37 +18,24 @@ export function EditTaskModal({ task, onClose, onSubmit }: EditTaskModalProps) {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const modalRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus title input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isSubmitting) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSubmitting, onClose]);
+  // Focus trap, initial focus and background inerting
+  useModalFocusTrap({
+    modalRef,
+    initialFocusRef: inputRef,
+    onClose,
+    isSubmitting,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
 
-    const trimmed = title.trim();
-    if (!trimmed) {
-      setValidationError('El título de la tarea es obligatorio.');
-      inputRef.current?.focus();
-      return;
-    }
-
-    if (trimmed.length > 200) {
-      setValidationError('El título no puede superar los 200 caracteres.');
+    const error = validateTaskTitle(title);
+    if (error) {
+      setValidationError(error);
       inputRef.current?.focus();
       return;
     }
@@ -57,7 +46,7 @@ export function EditTaskModal({ task, onClose, onSubmit }: EditTaskModalProps) {
 
     try {
       await onSubmit(task.id, {
-        title: trimmed,
+        title: title.trim(),
         status,
       });
       onClose();
@@ -75,6 +64,7 @@ export function EditTaskModal({ task, onClose, onSubmit }: EditTaskModalProps) {
 
   return (
     <div
+      ref={modalRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
@@ -141,25 +131,19 @@ export function EditTaskModal({ task, onClose, onSubmit }: EditTaskModalProps) {
               }}
               disabled={isSubmitting}
               maxLength={200}
-              placeholder="Título de la tarea"
+              placeholder="Ej. Análisis de muestra #104"
               aria-invalid={!!validationError}
               aria-describedby={validationError ? 'edit-task-title-error' : undefined}
-              className={`w-full px-3.5 py-2 rounded-xl text-sm border bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 transition-all ${
-                validationError
-                  ? 'border-red-500 focus:ring-red-500/20'
-                  : 'border-zinc-200 dark:border-zinc-700 focus:border-blue-600 focus:ring-blue-600/20'
-              }`}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             />
-            {validationError ? (
-              <p id="edit-task-title-error" className="mt-1.5 text-xs text-red-600 dark:text-red-400 font-medium">
+            {validationError && (
+              <p
+                id="edit-task-title-error"
+                role="alert"
+                className="text-xs text-red-600 dark:text-red-400 mt-1 font-medium"
+              >
                 {validationError}
               </p>
-            ) : (
-              <div className="mt-1 flex justify-end">
-                <span className="text-[11px] text-zinc-400">
-                  {title.length}/200
-                </span>
-              </div>
             )}
           </div>
 
@@ -176,7 +160,7 @@ export function EditTaskModal({ task, onClose, onSubmit }: EditTaskModalProps) {
               value={status}
               onChange={(e) => setStatus(e.target.value as TaskStatus)}
               disabled={isSubmitting}
-              className="w-full px-3.5 py-2 rounded-xl text-sm border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all cursor-pointer"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 cursor-pointer"
             >
               <option value="pending">{STATUS_LABELS.pending}</option>
               <option value="in_progress">{STATUS_LABELS.in_progress}</option>
@@ -184,23 +168,23 @@ export function EditTaskModal({ task, onClose, onSubmit }: EditTaskModalProps) {
             </select>
           </div>
 
-          <div className="pt-2 flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer flex items-center gap-2"
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {isSubmitting ? (
                 <>
-                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>

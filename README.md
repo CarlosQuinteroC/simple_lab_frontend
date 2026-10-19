@@ -10,7 +10,7 @@ Frontend web para el sistema de operaciones y control de laboratorio SimpleLab. 
 
 ## Configuración del entorno
 
-Copie el archivo `.env.example` a `.env.local` y configure las variables de entorno necesarias:
+Copie el archivo `.env.example` a `.env.local` y configure las variables de entorno requeridas:
 
 ```bash
 cp .env.example .env.local
@@ -24,10 +24,25 @@ cp .env.example .env.local
 
 ### Configuración de CORS y orígenes permitidos
 
-El backend de SimpleLab restringe los orígenes permitidos mediante la directiva de configuración `Cors__AllowedOrigins` (o `appsettings.json`):
+El backend de SimpleLab restringe los orígenes permitidos mediante la directiva de configuración `Cors__AllowedOrigins` (o la sección `Cors:AllowedOrigins` en `appsettings.json`):
 - El origen local estándar del frontend, `http://localhost:3000`, ya se encuentra permitido por defecto en la configuración estándar del backend.
 - Si ejecuta el frontend en otro puerto (ej. `http://localhost:3001`) o en un dominio diferente, debe añadir dicho origen en la configuración del backend:
-  - En `appsettings.json` o mediante variable de entorno: `Cors__AllowedOrigins=http://localhost:3000;http://localhost:3001;https://mi-dominio.com`.
+  - Mediante variable de entorno separando los orígenes con **comas**:
+    ```bash
+    Cors__AllowedOrigins="http://localhost:3000,http://localhost:3001,https://mi-dominio.com"
+    ```
+  - O en `appsettings.json` mediante un arreglo JSON:
+    ```json
+    {
+      "Cors": {
+        "AllowedOrigins": [
+          "http://localhost:3000",
+          "http://localhost:3001",
+          "https://mi-dominio.com"
+        ]
+      }
+    }
+    ```
 
 ## Ejecución local (sin Docker)
 
@@ -102,4 +117,4 @@ npm run build
   - Si una página recibe menos de 20 elementos, el botón *Siguiente* se deshabilita para indicar el fin del listado.
   - Si una página entrega exactamente 20 elementos, se permite avanzar. Si la página subsiguiente resulta estar vacía, la interfaz lo explica con claridad y ofrece la acción directa *Volver a la página anterior*.
 - **Prevención de condiciones de carrera**: Control de solicitudes desincronizadas para que respuestas demoradas no sobreescriban el filtro o página seleccionada activamente.
-- **Accesibilidad y adaptabilidad**: Totalmente navegable mediante teclado (foco automático en modales, retorno de foco al elemento de origen al cerrar, atajos de confirmación y escape) y adaptable a dispositivos móviles.
+- **Accesibilidad y contención de foco (a11y)**: Diálogos modales accesibles (`role="dialog"`, `aria-modal="true"`) con contención estricta de foco (focus trap: Tab y Shift+Tab ciclan dentro del modal sin escapar hacia la barra lateral o fondo) y fondo inerte (`inert`). Retorno automático de foco al elemento disparador al cerrar.

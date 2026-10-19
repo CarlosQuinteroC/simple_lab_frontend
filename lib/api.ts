@@ -7,12 +7,15 @@ export interface Task {
   title: string;
   status: TaskStatus;
   createdAt: string;
+  updatedAt?: string;
+  userId?: string;
 }
 
 export interface PagedTasksResponse {
   items: Task[];
   page: number;
   pageSize: number;
+  total?: number;
 }
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -21,17 +24,11 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   completed: 'Completada',
 };
 
-export const STATUS_COLORS: Record<TaskStatus, string> = {
-  pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800',
-  in_progress: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800',
-  completed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800',
-};
-
 export class ApiError extends Error {
-  status: number;
-  isUnauthorized: boolean;
+  public status: number;
+  public isUnauthorized: boolean;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number = 0) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
@@ -43,22 +40,31 @@ export function getApiBaseUrl(): string {
   return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5084';
 }
 
-export async function fetchTasks(options: {
-  page?: number;
-  pageSize?: number;
-  status?: TaskStatus;
+/* ========================================================================= */
+/* Authenticated HTTP transport helper                                       */
+/* ========================================================================= */
+
+interface ApiFetchOptions {
+  method?: string;
+  path: string;
   token?: string;
-}): Promise<PagedTasksResponse> {
+  body?: unknown;
+  searchParams?: Record<string, string | undefined>;
+  defaultErrorMessage: string;
+  serverErrorMessage: string;
+  notFoundErrorMessage?: string;
+}
+
+async function authenticatedFetch<T>(options: ApiFetchOptions): Promise<T> {
   const baseUrl = getApiBaseUrl();
-  const page = options.page ?? 1;
-  const pageSize = options.pageSize ?? 20;
+  const url = new URL(options.path, baseUrl);
 
-  const url = new URL('/api/tasks', baseUrl);
-  url.searchParams.set('page', String(page));
-  url.searchParams.set('pageSize', String(pageSize));
-
-  if (options.status) {
-    url.searchParams.set('status', options.status);
+  if (options.searchParams) {
+    for (const [key, value] of Object.entries(options.searchParams)) {
+      if (value !== undefined) {
+        url.searchParams.set(key, value);
+      }
+    }
   }
 
   let authToken = options.token;
@@ -72,37 +78,47 @@ export async function fetchTasks(options: {
     Accept: 'application/json',
   };
 
+  if (options.body !== undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
+
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
 
   try {
     const res = await fetch(url.toString(), {
-      method: 'GET',
+      method: options.method || 'GET',
       headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     });
 
     if (!res.ok) {
-      let errorMessage = 'Error al consultar las tareas.';
-      if (res.status >= 500) {
-        errorMessage = 'Error en el servidor al consultar las tareas.';
+      let errorMessage = options.defaultErrorMessage;
+      if (res.status === 404 && options.notFoundErrorMessage) {
+        errorMessage = options.notFoundErrorMessage;
+      } else if (res.status >= 500) {
+        errorMessage = options.serverErrorMessage;
       } else {
         try {
           const errorBody = await res.json();
           errorMessage = errorBody.message || errorBody.error || errorMessage;
         } catch {
-          // use default
+          // use default message
         }
       }
       throw new ApiError(errorMessage, res.status);
     }
 
-    const data = await res.json();
-    return {
-      items: data.items ?? [],
-      page: data.page ?? page,
-      pageSize: data.pageSize ?? pageSize,
-    };
+    if (res.status === 204) {
+      return undefined as T;
+    }
+
+    try {
+      return (await res.json()) as T;
+    } catch {
+      return undefined as T;
+    }
   } catch (err) {
     if (err instanceof ApiError) {
       throw err;
@@ -114,62 +130,51 @@ export async function fetchTasks(options: {
   }
 }
 
+export async function fetchTasks(options: {
+  page?: number;
+  pageSize?: number;
+  status?: TaskStatus;
+  token?: string;
+}): Promise<PagedTasksResponse> {
+  const page = options.page ?? 1;
+  const pageSize = options.pageSize ?? 20;
+
+  const data = await authenticatedFetch<{
+    items?: Task[];
+    page?: number;
+    pageSize?: number;
+  }>({
+    method: 'GET',
+    path: '/api/tasks',
+    token: options.token,
+    searchParams: {
+      page: String(page),
+      pageSize: String(pageSize),
+      status: options.status,
+    },
+    defaultErrorMessage: 'Error al consultar las tareas.',
+    serverErrorMessage: 'Error en el servidor al consultar las tareas.',
+  });
+
+  return {
+    items: data.items ?? [],
+    page: data.page ?? page,
+    pageSize: data.pageSize ?? pageSize,
+  };
+}
+
 export async function createTask(
   data: { title: string },
   options?: { token?: string }
 ): Promise<Task> {
-  const baseUrl = getApiBaseUrl();
-  const url = new URL('/api/tasks', baseUrl);
-
-  let authToken = options?.token;
-  if (!authToken) {
-    const supabase = getSupabase();
-    const session = (await supabase.auth.getSession()).data.session;
-    authToken = session?.access_token;
-  }
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-
-  try {
-    const res = await fetch(url.toString(), {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ title: data.title.trim() }),
-    });
-
-    if (!res.ok) {
-      let errorMessage = 'Error al crear la tarea.';
-      if (res.status >= 500) {
-        errorMessage = 'Error en el servidor al crear la tarea.';
-      } else {
-        try {
-          const errorBody = await res.json();
-          errorMessage = errorBody.message || errorBody.error || errorMessage;
-        } catch {
-          // use default
-        }
-      }
-      throw new ApiError(errorMessage, res.status);
-    }
-
-    const createdTask = (await res.json()) as Task;
-    return createdTask;
-  } catch (err) {
-    if (err instanceof ApiError) {
-      throw err;
-    }
-    throw new ApiError(
-      'Error de red o comunicación al conectar con el servicio de tareas.',
-      0
-    );
-  }
+  return authenticatedFetch<Task>({
+    method: 'POST',
+    path: '/api/tasks',
+    token: options?.token,
+    body: { title: data.title.trim() },
+    defaultErrorMessage: 'Error al crear la tarea.',
+    serverErrorMessage: 'Error en el servidor al crear la tarea.',
+  });
 }
 
 export async function updateTask(
@@ -177,139 +182,43 @@ export async function updateTask(
   data: { title: string; status: TaskStatus },
   options?: { token?: string }
 ): Promise<Task> {
-  const baseUrl = getApiBaseUrl();
-  const url = new URL(`/api/tasks/${encodeURIComponent(id)}`, baseUrl);
+  const res = await authenticatedFetch<Task | undefined>({
+    method: 'PUT',
+    path: `/api/tasks/${encodeURIComponent(id)}`,
+    token: options?.token,
+    body: {
+      title: data.title.trim(),
+      status: data.status,
+    },
+    defaultErrorMessage: 'Error al actualizar la tarea.',
+    notFoundErrorMessage: 'La tarea solicitada no existe o no está disponible.',
+    serverErrorMessage: 'Error en el servidor al actualizar la tarea.',
+  });
 
-  let authToken = options?.token;
-  if (!authToken) {
-    const supabase = getSupabase();
-    const session = (await supabase.auth.getSession()).data.session;
-    authToken = session?.access_token;
+  if (!res || !res.id) {
+    return {
+      id,
+      title: data.title.trim(),
+      status: data.status,
+      createdAt: new Date().toISOString(),
+    };
   }
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json',
-  };
-
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-
-  try {
-    const res = await fetch(url.toString(), {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify({
-        title: data.title.trim(),
-        status: data.status,
-      }),
-    });
-
-    if (!res.ok) {
-      let errorMessage = 'Error al actualizar la tarea.';
-      if (res.status === 404) {
-        errorMessage = 'La tarea solicitada no existe o no está disponible.';
-      } else if (res.status >= 500) {
-        errorMessage = 'Error en el servidor al actualizar la tarea.';
-      } else {
-        try {
-          const errorBody = await res.json();
-          errorMessage = errorBody.message || errorBody.error || errorMessage;
-        } catch {
-          // use default
-        }
-      }
-      throw new ApiError(errorMessage, res.status);
-    }
-
-    if (res.status === 204) {
-      return {
-        id,
-        title: data.title.trim(),
-        status: data.status,
-        createdAt: new Date().toISOString(),
-      };
-    }
-
-    try {
-      const updatedTask = (await res.json()) as Task;
-      return updatedTask;
-    } catch {
-      return {
-        id,
-        title: data.title.trim(),
-        status: data.status,
-        createdAt: new Date().toISOString(),
-      };
-    }
-  } catch (err) {
-    if (err instanceof ApiError) {
-      throw err;
-    }
-    throw new ApiError(
-      'Error de red o comunicación al conectar con el servicio de tareas.',
-      0
-    );
-  }
+  return res;
 }
 
 export async function deleteTask(
   id: string,
   options?: { token?: string }
 ): Promise<void> {
-  const baseUrl = getApiBaseUrl();
-  const url = new URL(`/api/tasks/${encodeURIComponent(id)}`, baseUrl);
-
-  let authToken = options?.token;
-  if (!authToken) {
-    const supabase = getSupabase();
-    const session = (await supabase.auth.getSession()).data.session;
-    authToken = session?.access_token;
-  }
-
-  const headers: Record<string, string> = {
-    Accept: 'application/json',
-  };
-
-  if (authToken) {
-    headers['Authorization'] = `Bearer ${authToken}`;
-  }
-
-  try {
-    const res = await fetch(url.toString(), {
-      method: 'DELETE',
-      headers,
-    });
-
-    if (!res.ok) {
-      let errorMessage = 'Error al eliminar la tarea.';
-      if (res.status === 404) {
-        errorMessage = 'La tarea solicitada no existe o ya fue eliminada.';
-      } else if (res.status >= 500) {
-        errorMessage = 'Error en el servidor al eliminar la tarea.';
-      } else {
-        try {
-          const errorBody = await res.json();
-          errorMessage = errorBody.message || errorBody.error || errorMessage;
-        } catch {
-          // use default
-        }
-      }
-      throw new ApiError(errorMessage, res.status);
-    }
-
-    // 204 No Content is success
-    return;
-  } catch (err) {
-    if (err instanceof ApiError) {
-      throw err;
-    }
-    throw new ApiError(
-      'Error de red o comunicación al conectar con el servicio de tareas.',
-      0
-    );
-  }
+  return authenticatedFetch<void>({
+    method: 'DELETE',
+    path: `/api/tasks/${encodeURIComponent(id)}`,
+    token: options?.token,
+    defaultErrorMessage: 'Error al eliminar la tarea.',
+    notFoundErrorMessage: 'La tarea solicitada no existe o ya fue eliminada.',
+    serverErrorMessage: 'Error en el servidor al eliminar la tarea.',
+  });
 }
 
 /* ========================================================================= */

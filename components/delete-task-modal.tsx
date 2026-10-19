@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Task, ApiError } from '@/lib/api';
+import { useModalFocusTrap } from '@/components/use-modal-focus-trap';
 
 interface DeleteTaskModalProps {
   task: Task;
@@ -13,23 +14,16 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const modalRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Focus cancel button on mount for safety
-  useEffect(() => {
-    cancelButtonRef.current?.focus();
-  }, []);
-
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !isDeleting) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDeleting, onClose]);
+  // Focus trap, initial focus and background inerting
+  useModalFocusTrap({
+    modalRef,
+    initialFocusRef: cancelButtonRef,
+    onClose,
+    isSubmitting: isDeleting,
+  });
 
   const handleDelete = async () => {
     if (isDeleting) return;
@@ -53,6 +47,7 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
 
   return (
     <div
+      ref={modalRef}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
@@ -63,24 +58,12 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-950 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </div>
-            <h3
-              id="delete-task-modal-title"
-              className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
-            >
-              Eliminar tarea
-            </h3>
-          </div>
+          <h3
+            id="delete-task-modal-title"
+            className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
+          >
+            Eliminar tarea
+          </h3>
           <button
             type="button"
             onClick={onClose}
@@ -111,21 +94,21 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
             </div>
           )}
 
-          <p className="text-sm text-zinc-600 dark:text-zinc-400 leading-relaxed">
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
             ¿Está seguro de que desea eliminar la tarea{' '}
-            <strong className="text-zinc-900 dark:text-zinc-100 font-semibold break-words">
-              &ldquo;{task.title}&rdquo;
-            </strong>
-            ? Esta operación es permanente y no se puede deshacer.
+            <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+              «{task.title}»
+            </span>
+            ? Esta acción no se puede deshacer.
           </p>
 
-          <div className="pt-2 flex items-center justify-end gap-3">
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100 dark:border-zinc-800/80">
             <button
               type="button"
               ref={cancelButtonRef}
               onClick={onClose}
               disabled={isDeleting}
-              className="px-4 py-2 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer"
+              className="px-4 py-2 text-xs font-semibold rounded-xl border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               Cancelar
             </button>
@@ -133,11 +116,11 @@ export function DeleteTaskModal({ task, onClose, onConfirm }: DeleteTaskModalPro
               type="button"
               onClick={handleDelete}
               disabled={isDeleting}
-              className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white text-sm font-semibold shadow-sm transition-colors cursor-pointer flex items-center gap-2"
+              className="px-4 py-2 text-xs font-semibold rounded-xl bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors cursor-pointer flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-red-500"
             >
               {isDeleting ? (
                 <>
-                  <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                  <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
