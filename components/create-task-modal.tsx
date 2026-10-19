@@ -50,9 +50,8 @@ export function CreateTaskModal({ onClose, onSubmit }: CreateTaskModalProps) {
       if (err instanceof ApiError) {
         setSubmitError(err.message);
       } else {
-        setSubmitError('Ocurrió un error inesperado al crear la tarea.');
+        setSubmitError('No se pudo crear la tarea. Inténtalo de nuevo.');
       }
-    } finally {
       setIsSubmitting(false);
     }
   };
@@ -63,28 +62,30 @@ export function CreateTaskModal({ onClose, onSubmit }: CreateTaskModalProps) {
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="create-task-modal-title"
+      aria-labelledby="create-task-title-heading"
     >
-      <div
-        className="w-full max-w-md bg-white dark:bg-zinc-900 rounded-2xl border border-zinc-200 dark:border-zinc-800 shadow-xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-6 py-5 border-b border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
-          <h3
-            id="create-task-modal-title"
-            className="text-lg font-semibold text-zinc-900 dark:text-zinc-100"
+      <div className="bg-white dark:bg-zinc-900 rounded-2xl max-w-md w-full shadow-2xl border border-zinc-200 dark:border-zinc-800 overflow-hidden transform transition-all">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100 dark:border-zinc-800/80">
+          <h2
+            id="create-task-title-heading"
+            className="text-base font-semibold text-zinc-900 dark:text-zinc-100"
           >
             Nueva tarea
-          </h3>
+          </h2>
           <button
             type="button"
             onClick={onClose}
             disabled={isSubmitting}
             aria-label="Cerrar modal"
-            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 disabled:opacity-50 p-1 rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M6 18L18 6M6 6l12 12"
+              />
             </svg>
           </button>
         </div>
@@ -162,7 +163,7 @@ export function CreateTaskModal({ onClose, onSubmit }: CreateTaskModalProps) {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                   </svg>
-                  <span>Creando...</span>
+                  <span>Guardando...</span>
                 </>
               ) : (
                 'Crear tarea'

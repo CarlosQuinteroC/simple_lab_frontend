@@ -13,8 +13,10 @@ export function useModalFocusTrap({
   onClose,
   isSubmitting = false,
 }: UseModalFocusTrapOptions) {
-  // 1. Initial focus
+  // 1. Initial focus and restore previous focus on unmount
   useEffect(() => {
+    const previousActiveElement = document.activeElement as HTMLElement | null;
+
     const timer = setTimeout(() => {
       if (initialFocusRef?.current) {
         initialFocusRef.current.focus();
@@ -28,7 +30,14 @@ export function useModalFocusTrap({
       }
     }, 10);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      setTimeout(() => {
+        if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
+          previousActiveElement.focus();
+        }
+      }, 10);
+    };
   }, [initialFocusRef, modalRef]);
 
   // 2. Inert background elements while modal is mounted

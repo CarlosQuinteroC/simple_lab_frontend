@@ -47,15 +47,6 @@ export async function loginAsOperator(
   password = 'password123'
 ) {
   const loginInput = page.getByLabel(/correo electrónico/i);
-  try {
-    const isVisible = await loginInput.isVisible({ timeout: 1500 });
-    if (!isVisible) {
-      return;
-    }
-  } catch {
-    return;
-  }
-
   await loginInput.fill(email);
   await page.getByLabel(/contraseña/i).fill(password);
   await page.getByRole('button', { name: /iniciar sesión/i }).click();
