@@ -143,4 +143,42 @@ test.describe('Contención de foco y fondo inerte en modales', () => {
     await expect(modal).not.toBeVisible();
     await expect(deleteBtn).toBeFocused();
   });
+  test('Al confirmar la eliminación de la última tarea, el foco se devuelve a un control disponible (Nueva tarea) y no al body', async ({ page }) => {
+    let items = [
+      { id: 'focus-task-1', title: 'Tarea para eliminar y verificar foco', status: 'pending', createdAt: new Date().toISOString() },
+    ];
+    await page.route(/\/api\/tasks/, async (route) => {
+      const request = route.request();
+      if (request.method() === 'DELETE') {
+        items = [];
+        await route.fulfill({ status: 204 });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ items, page: 1, pageSize: 20 }),
+      });
+    });
+
+    await page.goto('/tasks');
+    await loginAsOperator(page);
+
+    const deleteBtn = page.getByRole('button', { name: /eliminar tarea/i });
+    await expect(deleteBtn).toBeVisible();
+    await deleteBtn.click();
+
+    const modal = page.getByRole('dialog', { name: /eliminar tarea/i });
+    await expect(modal).toBeVisible();
+
+    await modal.getByRole('button', { name: /eliminar tarea/i }).click();
+    await expect(modal).not.toBeVisible();
+
+    // The deleted button is gone from the DOM and empty state is rendered
+    await expect(page.getByText('No hay tareas registradas')).toBeVisible();
+
+    // Focus must NOT be on body, it must be on an available control like Nueva tarea
+    const newBtn = page.getByRole('button', { name: /nueva tarea/i });
+    await expect(newBtn).toBeFocused();
+  });
 });

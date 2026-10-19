@@ -89,6 +89,11 @@ function TasksList() {
           if (!ignore) {
             setTasks(response.items);
             setIsLoadingTasks(false);
+            setTimeout(() => {
+              if (!document.activeElement || document.activeElement === document.body) {
+                createButtonRef.current?.focus();
+              }
+            }, 50);
           }
         })
         .catch((err: unknown) => {
@@ -183,18 +188,23 @@ function TasksList() {
     const taskId = deletingTask?.id;
     setDeletingTask(null);
     if (taskId) {
-      const btn = deleteButtonRefs.current.get(taskId);
-      if (btn && document.body.contains(btn)) {
-        btn.focus();
-      } else {
-        createButtonRef.current?.focus();
-      }
+      setTimeout(() => {
+        const btn = deleteButtonRefs.current.get(taskId);
+        if (btn && document.body.contains(btn)) {
+          btn.focus();
+        } else {
+          createButtonRef.current?.focus();
+        }
+      }, 30);
     }
   };
 
   const handleDeleteTask = async (id: string) => {
     try {
       await deleteTask(id, { token: token ?? undefined });
+      deleteButtonRefs.current.delete(id);
+      editButtonRefs.current.delete(id);
+      setTasks((prev) => prev.filter((t) => t.id !== id));
       if (tasks.length === 1 && currentPage > 1) {
         // If deleting the last item on page > 1, navigate back to previous page
         setCurrentPage((prev) => Math.max(1, prev - 1));
@@ -238,6 +248,7 @@ function TasksList() {
         <button
           type="button"
           ref={createButtonRef}
+          data-action="new-task"
           onClick={handleOpenCreateModal}
           className="self-start sm:self-auto px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-semibold shadow-sm transition-colors cursor-pointer flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
@@ -462,7 +473,7 @@ function TasksList() {
         />
       )}
 
-      {/* Modal de confirmación de eliminación */}
+      {/* Modal de confirmación de eliminación de tarea */}
       {deletingTask && (
         <DeleteTaskModal
           task={deletingTask}
@@ -475,29 +486,25 @@ function TasksList() {
 }
 
 export default function TasksPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
-  if (authLoading) {
+  if (isLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8">
-        <div className="flex items-center gap-3 text-zinc-600 dark:text-zinc-400">
-          <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="flex flex-col items-center gap-3">
+          <svg className="animate-spin h-8 w-8 text-blue-600" fill="none" viewBox="0 0 24 24">
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
           </svg>
-          <span className="text-sm font-medium">Verificando sesión...</span>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">Cargando aplicación...</p>
         </div>
       </div>
     );
   }
 
   if (!user) {
-    return (
-      <div className="flex flex-1 items-center justify-center p-6">
-        <LoginForm />
-      </div>
-    );
+    return <LoginForm />;
   }
 
-  return <TasksList key={user.id} />;
+  return <TasksList />;
 }

@@ -297,6 +297,10 @@ test.describe('Ticket 05: Eliminar tareas con confirmación', () => {
     await expect(page.getByText('No hay tareas registradas')).toBeVisible();
     // Jamás solicita una página 0
     expect(requestedPages.includes(0)).toBe(false);
+
+    // Al eliminarse la última tarea y desaparecer el botón disparador, el foco se devuelve a un control disponible (Nueva tarea)
+    const createBtn = page.getByRole('button', { name: /nueva tarea/i });
+    await expect(createBtn).toBeFocused();
   });
 
   test('Slice 6: Error al eliminar (500 o 404) muestra mensaje, no retira la tarea y permite reintentar', async ({ page }) => {

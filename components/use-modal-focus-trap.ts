@@ -3,6 +3,8 @@ import { useEffect, RefObject } from 'react';
 interface UseModalFocusTrapOptions {
   modalRef: RefObject<HTMLElement | null>;
   initialFocusRef?: RefObject<HTMLElement | null>;
+  fallbackFocusRef?: RefObject<HTMLElement | null>;
+  fallbackFocusSelector?: string;
   onClose?: () => void;
   isSubmitting?: boolean;
 }
@@ -10,6 +12,8 @@ interface UseModalFocusTrapOptions {
 export function useModalFocusTrap({
   modalRef,
   initialFocusRef,
+  fallbackFocusRef,
+  fallbackFocusSelector,
   onClose,
   isSubmitting = false,
 }: UseModalFocusTrapOptions) {
@@ -30,15 +34,35 @@ export function useModalFocusTrap({
       }
     }, 10);
 
+    const restoreFocus = () => {
+      if (
+        previousActiveElement &&
+        document.body.contains(previousActiveElement) &&
+        typeof previousActiveElement.focus === 'function'
+      ) {
+        previousActiveElement.focus();
+      } else if (fallbackFocusRef?.current && document.body.contains(fallbackFocusRef.current)) {
+        fallbackFocusRef.current.focus();
+      } else {
+        const selector =
+          fallbackFocusSelector ||
+          'button[data-action="new-task"], button:not([disabled]):not([aria-hidden="true"])';
+        const fallback = document.querySelector<HTMLElement>(selector);
+        fallback?.focus();
+      }
+    };
+
     return () => {
       clearTimeout(timer);
+      setTimeout(restoreFocus, 20);
+      // Double check after React flushes pending list mutations
       setTimeout(() => {
-        if (previousActiveElement && typeof previousActiveElement.focus === 'function') {
-          previousActiveElement.focus();
+        if (!document.activeElement || document.activeElement === document.body) {
+          restoreFocus();
         }
-      }, 10);
+      }, 80);
     };
-  }, [initialFocusRef, modalRef]);
+  }, [initialFocusRef, modalRef, fallbackFocusRef, fallbackFocusSelector]);
 
   // 2. Inert background elements while modal is mounted
   useEffect(() => {
@@ -113,24 +137,7 @@ export function useModalFocusTrap({
       }
     };
 
-    const handleFocusIn = (e: FocusEvent) => {
-      if (modalEl && !modalEl.contains(e.target as Node)) {
-        e.preventDefault();
-        const focusable = modalEl.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        );
-        if (focusable.length > 0) {
-          focusable[0].focus();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    document.addEventListener('focusin', handleFocusIn);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      document.removeEventListener('focusin', handleFocusIn);
-    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [modalRef, onClose, isSubmitting]);
 }
