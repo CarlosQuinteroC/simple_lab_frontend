@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setupAuthMocks, loginAsOperator, MOCK_AUTH_TOKEN as MOCK_TOKEN } from './fixtures/auth';
+import { setupAuthMocks, loginAsOperator } from './fixtures/auth';
 
 test.describe('Ticket 02: Filtrar y recorrer las tareas', () => {
   test.beforeEach(async ({ page }) => {
