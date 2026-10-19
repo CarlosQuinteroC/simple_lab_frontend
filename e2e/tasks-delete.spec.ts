@@ -1,42 +1,9 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { setupAuthMocks, loginAsOperator, MOCK_AUTH_TOKEN as MOCK_TOKEN } from './fixtures/auth';
 
 test.describe('Ticket 05: Eliminar tareas con confirmación', () => {
-  const MOCK_TOKEN = 'mock-access-token-t05';
-  const MOCK_USER = {
-    id: 'user-t05',
-    email: 'operador@simplelab.local',
-  };
-
-  async function loginAsOperator(page: Page) {
-    await page.getByLabel(/correo electrónico/i).fill('operador@simplelab.local');
-    await page.getByLabel(/contraseña/i).fill('password123');
-    await page.getByRole('button', { name: /iniciar sesión/i }).click();
-  }
-
   test.beforeEach(async ({ page }) => {
-    // Intercept Supabase Auth user request
-    await page.route('**/auth/v1/user*', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(MOCK_USER),
-      });
-    });
-
-    // Intercept Supabase Auth token request
-    await page.route('**/auth/v1/token?grant_type=password', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          access_token: MOCK_TOKEN,
-          token_type: 'bearer',
-          expires_in: 3600,
-          refresh_token: 'mock-refresh-token',
-          user: MOCK_USER,
-        }),
-      });
-    });
+    await setupAuthMocks(page);
   });
 
   test('Slice 1: Abre modal de confirmación con nombre de tarea, foco seguro en Cancelar, y al cancelar no envía DELETE', async ({ page }) => {
