@@ -387,6 +387,132 @@ test.describe('Ticket 01: Iniciar sesión y consultar tareas', () => {
     await expect(page.getByText('Tarea Confidencial Operador 1')).not.toBeVisible();
   });
 
+  test('Slice 7c: Sustitución directa de sesión entre cuentas reinicia el estado y cierra modales abiertos con datos previos', async ({ page }) => {
+    await page.route('**/auth/v1/user*', async (route) => {
+      const auth = route.request().headers()['authorization'];
+      if (auth && auth.includes('mock-token-user-2')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'user-operator-2',
+            email: 'operador2@simplelab.local',
+            aud: 'authenticated',
+            role: 'authenticated',
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(MOCK_USER),
+        });
+      }
+    });
+
+    await page.route('**/auth/v1/token?grant_type=password', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: MOCK_TOKEN,
+          token_type: 'bearer',
+          expires_in: 3600,
+          refresh_token: 'mock-refresh-token',
+          user: MOCK_USER,
+        }),
+      });
+    });
+
+    await page.route('**/api/tasks*', async (route) => {
+      const auth = route.request().headers()['authorization'];
+      if (auth && auth.includes('mock-token-user-2')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              {
+                id: 'task-user-2',
+                title: 'Tarea Exclusiva de Cuenta B',
+                status: 'in_progress',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            page: 1,
+            pageSize: 20,
+          }),
+        });
+      } else {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              {
+                id: 'task-user-1',
+                title: 'Tarea Confidencial de Cuenta A',
+                status: 'pending',
+                createdAt: new Date().toISOString(),
+              },
+            ],
+            page: 1,
+            pageSize: 20,
+          }),
+        });
+      }
+    });
+
+    await page.goto('/tasks');
+    await loginAsOperator(page, 'operador@simplelab.local');
+
+    await expect(page.getByText('Tarea Confidencial de Cuenta A')).toBeVisible();
+
+    // Abrir modal de edición en la Cuenta A
+    const editBtn = page.getByRole('button', { name: /editar tarea/i });
+    await expect(editBtn).toBeVisible();
+    await editBtn.click();
+
+    const editModal = page.getByRole('dialog', { name: /editar tarea/i });
+    await expect(editModal).toBeVisible();
+    await expect(editModal.getByRole('textbox', { name: /título/i })).toHaveValue('Tarea Confidencial de Cuenta A');
+
+    // Simular sustitución directa de sesión mediante el canal multiventana (BroadcastChannel) de Supabase
+    await page.evaluate(() => {
+      const storageKey =
+        Object.keys(localStorage).find((k) => k.startsWith('sb-') && k.endsWith('-auth-token')) ||
+        'sb-wpoaiywnjoonbjjogdeo-auth-token';
+      const session2 = {
+        access_token: 'mock-token-user-2',
+        token_type: 'bearer',
+        expires_in: 3600,
+        refresh_token: 'mock-refresh-token-2',
+        user: {
+          id: 'user-operator-2',
+          email: 'operador2@simplelab.local',
+          aud: 'authenticated',
+          role: 'authenticated',
+        },
+      };
+      localStorage.setItem(storageKey, JSON.stringify(session2));
+      const bc = new BroadcastChannel(storageKey);
+      bc.postMessage({
+        event: 'SIGNED_IN',
+        session: session2,
+      });
+    });
+
+    // Al sustituirse la sesión a la Cuenta B:
+    // 1. El modal de edición de la Cuenta A debe desmontarse / no conservarse
+    await expect(editModal).not.toBeVisible();
+
+    // 2. Las tareas de la Cuenta A ya no deben mostrarse
+    await expect(page.getByText('Tarea Confidencial de Cuenta A')).not.toBeVisible();
+
+    // 3. Deben mostrarse las tareas correspondientes a la Cuenta B
+    await expect(page.getByText('Tarea Exclusiva de Cuenta B')).toBeVisible();
+  });
+
   test('Slice 8: Navegación lateral y diseño accesible en vista móvil y con teclado', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
 

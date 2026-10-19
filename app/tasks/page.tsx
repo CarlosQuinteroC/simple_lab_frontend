@@ -506,5 +506,5 @@ export default function TasksPage() {
     return <LoginForm />;
   }
 
-  return <TasksList />;
+  return <TasksList key={user.id} />;
 }
