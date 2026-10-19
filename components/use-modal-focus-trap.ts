@@ -41,8 +41,8 @@ export function useModalFocusTrap({
     // Traverse upwards from modalEl to find sibling trees to inert
     let current: HTMLElement | null = modalEl;
     while (current && current.parentElement) {
-      const parent = current.parentElement;
-      for (const child of Array.from(parent.children) as HTMLElement[]) {
+      const parentEl: HTMLElement = current.parentElement;
+      for (const child of Array.from(parentEl.children) as HTMLElement[]) {
         if (child !== current && !child.contains(modalEl)) {
           if (!child.hasAttribute('inert')) {
             child.setAttribute('inert', '');
@@ -51,7 +51,7 @@ export function useModalFocusTrap({
           }
         }
       }
-      current = parent;
+      current = parentEl;
       if (current === document.body) break;
     }
 
