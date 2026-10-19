@@ -24,6 +24,15 @@ export const STATUS_LABELS: Record<TaskStatus, string> = {
   completed: 'Completada',
 };
 
+export const STATUS_COLORS: Record<TaskStatus, string> = {
+  pending:
+    'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800',
+  in_progress:
+    'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800',
+  completed:
+    'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800',
+};
+
 export class ApiError extends Error {
   public status: number;
   public isUnauthorized: boolean;
