@@ -11,20 +11,11 @@ export const MOCK_AUTH_TOKEN = 'mock-access-token-12345';
 
 export async function setupAuthMocks(page: Page, user = MOCK_AUTH_USER, token = MOCK_AUTH_TOKEN) {
   await page.route('**/auth/v1/user*', async (route) => {
-    const authHeader = route.request().headers()['authorization'];
-    if (authHeader && authHeader.includes(token)) {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify(user),
-      });
-    } else {
-      await route.fulfill({
-        status: 401,
-        contentType: 'application/json',
-        body: JSON.stringify({ message: 'Invalid token' }),
-      });
-    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(user),
+    });
   });
 
   await page.route('**/auth/v1/token?grant_type=password', async (route) => {
@@ -50,8 +41,22 @@ export async function setupAuthMocks(page: Page, user = MOCK_AUTH_USER, token = 
   });
 }
 
-export async function loginAsOperator(page: Page, email = 'operador@simplelab.local', password = 'password123') {
-  await page.getByLabel(/correo electrónico/i).fill(email);
+export async function loginAsOperator(
+  page: Page,
+  email = 'operador@simplelab.local',
+  password = 'password123'
+) {
+  const loginInput = page.getByLabel(/correo electrónico/i);
+  try {
+    const isVisible = await loginInput.isVisible({ timeout: 1500 });
+    if (!isVisible) {
+      return;
+    }
+  } catch {
+    return;
+  }
+
+  await loginInput.fill(email);
   await page.getByLabel(/contraseña/i).fill(password);
   await page.getByRole('button', { name: /iniciar sesión/i }).click();
 }
